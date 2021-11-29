@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.5.1/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.5.1/dist/leaflet.js"></script>
+    <style>
+        #app {
+            height: 100vh;
+            width: 100vw;
+        }
+        .is-available {
+            fill: #78D880 !important;
+            cursor: pointer;
+        
+    </style>
+    <title>Document</title>
+</head>
+
+<body>
+    <!-- <object data="https://s3-us-west-1.amazonaws.com/sog-us-r6/hillwood-pecan_square_v12-12082019-1820.svg" type="image/svg+xml"
+        id="alphasvg" width="100%" height="100%"></object> -->
+    <div id="app"></div>
+</body>
+
+<script>
+    getLotList();
+    var doc;
+    var nodes;
+    var svgElement = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    var zoom = 5;
+    var bounds;
+    var lotsummary;
+    var map = L.map("app", {
+        center: [0, 0],
+        crs: L.CRS.Simple,
+        zoom: zoom,
+        minZoom: 7,
+        zoomDelta: 0.25,
+        zoomSnap: 0.25
+    });
+
+    var imageUrl = "masterplan.svg";
+    var img = new Image();
+    img.src = imageUrl;
+
+    fetch(imageUrl).then(res => {
+        return res.text()
+    }).then(res => {
+        const parser = new DOMParser();
+        doc = parser.parseFromString(res, "image/svg+xml").firstElementChild;
+        const style = doc.getElementsByTagName('style')[0];
+        document.head.appendChild(style);
+        nodes = doc.childNodes;
+    })
+
+    function getLotList() {
+        stages = [];
+        r6headers = {
+            'content-type': 'application/json;charset=UTF-8',
+            'Authorization': 'Basic aGlsbHdvb2RyNmFwaTpSNkhpbGx3b29kQXAx',
+            'securitytoken': '7070442806278810070281681662200467521563841108233'
+        }
+          // r6ApiServiceUrl: 'https://demo-pipeline.runwayproptech.com/runwaywsrest',
+  // sitingApiUrl: 'https://r6dev.runwayproptech.com',
+  // r6AuthApiKey: 'Basic aGlsbHdvb2RyNmFwaTpSNkhpbGx3b29kQXAx',
+  // r6SecurityToken: '7070442806278810070281681662200467521563841108233',
+        const url = 'https://demo-pipeline.runwayproptech.com/runwaywsrest/landapi/landsummary/list';
+
+        return fetch(url, {
+            method: 'GET',
+            headers: this.r6headers
+        }).then((res) => {
+            if (res.status === 200) {
+                return res.json();
+            }
+        }).then(res => {
+            filterStages(res);
+        }).catch(err => {
+            return err;
+        })
+
+    }
+
+    async function filterStages(lots) {
+        let svgContents = [];
+        copySvgAttr();
+        lotsummary = lots;
+        await lots.forEach(lot => {
+            if (!stages.includes(lot.stageproductname)) {
+                stages.push(lot.stageproductname);
+            }
+        });
+
+        await doc.childNodes.forEach(async node => {
+            const id = node.id;
+            if (id) {
+                name = id.split('_')[1];
+                if (stages.includes(name)) {
+                    // node.removeChild(node.firstElementChild);
+                    svgContents = svgContents + node.innerHTML;
+                }
+            }
+        });
+        svgElement.innerHTML = svgContents;
+        L.svgOverlay(svgElement, bounds, {
+            interactive: true
+        }).addTo(map);
+        colorLots();
+    }
+
+    function copySvgAttr() {
+        let i = 0;
+        attributes = doc.attributes;
+        while (i < attributes.length) {
+            const key = attributes[i].nodeName;
+            const value = attributes[i].nodeValue;
+            svgElement.setAttribute(key, value);
+            i += 1;
+        }
+    }
+
+    img.onload = function () {
+        var h = img.height,
+            w = img.width,
+            southWest = map.unproject([-w, h], zoom),
+            northEast = map.unproject([w, -h], zoom);
+        bounds = new L.LatLngBounds(southWest, northEast);
+        L.imageOverlay(img, bounds).addTo(map);
+        map.setMaxBounds(bounds);
+        map.fitBounds(bounds);
+    };
+
+    function colorLots() {
+        lotsummary.forEach(lot => {
+            let lotElement = document.getElementById('lot_'+ lot.productname);
+            console.log(lotElement);
+            if (lotElement) {
+                lotElement.classList.add('highlight');
+                this.lotClickEvent(lot, lotElement);
+                let classname = this.getStatusname(lot.currentstatusname);
+                lotElement.classList.add(classname);
+            }
+        })
+
+        el = document.getElementById('lot_1A-1A-26');
+        rect = el.getBoundingClientRect();
+        var pointxx = L.point(rect.x + (rect.width / 2), rect.y + (rect.height / 2));
+        latlng1 = map.layerPointToLatLng(pointxx);
+        map.flyTo(latlng1, 10);
+    }
+
+    function lotClickEvent(lotSummary, lotElement) {
+
+    }
+
+    function getStatusname(statusname) {
+        switch (statusname) {
+            case 'Available':
+                return 'is-available';
+                break;
+            case 'Closed':
+                return 'is-closed';
+                break;
+            case 'Model':
+                return 'is-model';
+                break;
+            case 'Sold':
+                return 'is-sold';
+                break;
+            case 'Spec':
+                return 'is-spec';
+                break;
+            default:
+                break;
+        }
+    }
+</script>
+
+</html>
